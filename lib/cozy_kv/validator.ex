@@ -21,7 +21,7 @@ defmodule CozyKV.Validator do
   defp do_run([] = initial_spec, data, _path, initial_run?) do
     # 1. check unknown keys
     if initial_run? do
-      known_keys = Keyword.keys(initial_spec)
+      known_keys = KV.keys(initial_spec)
       unknown_keys = KV.keys(data) -- known_keys
 
       if unknown_keys != [] do
@@ -44,7 +44,7 @@ defmodule CozyKV.Validator do
 
     # 1. check unknown keys
     if initial_run? do
-      known_keys = Keyword.keys(initial_spec)
+      known_keys = KV.keys(initial_spec)
       unknown_keys = KV.keys(data) -- known_keys
 
       if unknown_keys != [] do

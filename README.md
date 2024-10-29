@@ -4,17 +4,20 @@ Validates data containing key-value pairs.
 
 ## Installation
 
-If [available in Hex](https://hex.pm/docs/publish), the package can be installed
-by adding `cozy_kv` to your list of dependencies in `mix.exs`:
+Add `:cozy_kv` to the list of dependencies in `mix.exs`:
 
 ```elixir
 def deps do
   [
-    {:cozy_kv, "~> 0.1.0"}
+    {:cozy_kv, <requirement>}
   ]
 end
 ```
 
-Documentation can be generated with [ExDoc](https://github.com/elixir-lang/ex_doc)
-and published on [HexDocs](https://hexdocs.pm). Once published, the docs can
-be found at <https://hexdocs.pm/cozy_kv>.
+## Usage
+
+For more information, see the [documentation](https://hexdocs.pm/cozy_kv).
+
+## License
+
+[Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0)
