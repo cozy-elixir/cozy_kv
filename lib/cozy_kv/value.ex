@@ -11,14 +11,14 @@ defmodule CozyKV.Value do
     {:ok, value}
   end
 
-  def validate_value(:atom = type, value, metadata) do
-    if is_atom(value),
+  def validate_value(nil = type, value, metadata) do
+    if is_nil(value),
       do: {:ok, value},
       else: error_tuple({:invalid_value, type: type, value: value}, metadata)
   end
 
-  def validate_value(nil = type, value, metadata) do
-    if is_nil(value),
+  def validate_value(:atom = type, value, metadata) do
+    if is_atom(value),
       do: {:ok, value},
       else: error_tuple({:invalid_value, type: type, value: value}, metadata)
   end
@@ -59,34 +59,25 @@ defmodule CozyKV.Value do
       else: error_tuple({:invalid_value, type: type, value: value}, metadata)
   end
 
-  def validate_value(:timeout = type, value, metadata) do
-    if value == :infinit or (is_integer(value) and value >= 0),
+  def validate_value(:tuple = type, value, metadata) do
+    if is_tuple(value),
       do: {:ok, value},
       else: error_tuple({:invalid_value, type: type, value: value}, metadata)
   end
 
-  def validate_value(:pid = type, value, metadata) do
-    if is_pid(value),
-      do: {:ok, value},
-      else: error_tuple({:invalid_value, type: type, value: value}, metadata)
-  end
+  def validate_value({:tuple, subtypes} = type, value, metadata) do
+    if !is_tuple(value), do: throw(:invalid_value)
+    if !(tuple_size(value) == length(subtypes)), do: throw(:invalid_value)
 
-  def validate_value(:reference = type, value, metadata) do
-    if is_reference(value),
-      do: {:ok, value},
-      else: error_tuple({:invalid_value, type: type, value: value}, metadata)
-  end
+    for {t, v} <- Enum.zip(subtypes, Tuple.to_list(value)) do
+      if match?({:error, _}, validate_value(t, v, metadata)),
+        do: throw(:invalid_value)
+    end
 
-  def validate_value(:mfa = type, value, metadata) do
-    if match?({mod, fun, args} when is_atom(mod) and is_atom(fun) and is_list(args), value),
-      do: {:ok, value},
-      else: error_tuple({:invalid_value, type: type, value: value}, metadata)
-  end
-
-  def validate_value(:mod_args = type, value, metadata) do
-    if match?({mod, _args} when is_atom(mod), value),
-      do: {:ok, value},
-      else: error_tuple({:invalid_value, type: type, value: value}, metadata)
+    {:ok, value}
+  catch
+    :invalid_value ->
+      error_tuple({:invalid_value, type: type, value: value}, metadata)
   end
 
   def validate_value(:list, value, metadata) do
@@ -107,28 +98,13 @@ defmodule CozyKV.Value do
       error_tuple({:invalid_value, type: type, value: value}, metadata)
   end
 
-  def validate_value({:tuple, subtypes} = type, value, metadata) do
-    if !is_tuple(value), do: throw(:invalid_value)
-    if !(tuple_size(value) == length(subtypes)), do: throw(:invalid_value)
-
-    for {t, v} <- Enum.zip(subtypes, Tuple.to_list(value)) do
-      if match?({:error, _}, validate_value(t, v, metadata)),
-        do: throw(:invalid_value)
-    end
-
-    {:ok, value}
-  catch
-    :invalid_value ->
-      error_tuple({:invalid_value, type: type, value: value}, metadata)
-  end
-
   def validate_value(:keyword_list = type, value, metadata) do
     if keyword_list?(value),
       do: {:ok, value},
       else: error_tuple({:invalid_value, type: type, value: value}, metadata)
   end
 
-  def validate_value({:keyword_list, _} = type, value, metadata) do
+  def validate_value({:keyword_list, _spec} = type, value, metadata) do
     if keyword_list?(value),
       do: {:ok, value},
       else: error_tuple({:invalid_value, type: type, value: value}, metadata)
@@ -140,7 +116,7 @@ defmodule CozyKV.Value do
       else: error_tuple({:invalid_value, type: type, value: value}, metadata)
   end
 
-  def validate_value({:non_empty_keyword_list, _} = type, value, metadata) do
+  def validate_value({:non_empty_keyword_list, _spec} = type, value, metadata) do
     if keyword_list?(value) and value != [],
       do: {:ok, value},
       else: error_tuple({:invalid_value, type: type, value: value}, metadata)
@@ -167,14 +143,8 @@ defmodule CozyKV.Value do
       error_tuple({:invalid_value, type: type, value: value}, metadata)
   end
 
-  def validate_value({:map, _keys_spec} = type, value, metadata) do
+  def validate_value({:map, _spec} = type, value, metadata) do
     if is_map(value),
-      do: {:ok, value},
-      else: error_tuple({:invalid_value, type: type, value: value}, metadata)
-  end
-
-  def validate_value({:fun, arity} = type, value, metadata) do
-    if is_function(value) && fun_arity(value) == arity,
       do: {:ok, value},
       else: error_tuple({:invalid_value, type: type, value: value}, metadata)
   end
@@ -185,13 +155,49 @@ defmodule CozyKV.Value do
       else: error_tuple({:invalid_value, type: type, value: value}, metadata)
   end
 
-  def validate_value({:in, choices} = type, value, metadata) do
-    if value in choices,
+  def validate_value(:timeout = type, value, metadata) do
+    if value == :infinity or (is_integer(value) and value >= 0),
       do: {:ok, value},
       else: error_tuple({:invalid_value, type: type, value: value}, metadata)
   end
 
-  def validate_value({:or, subtypes} = type, value, metadata) do
+  def validate_value(:pid = type, value, metadata) do
+    if is_pid(value),
+      do: {:ok, value},
+      else: error_tuple({:invalid_value, type: type, value: value}, metadata)
+  end
+
+  def validate_value(:reference = type, value, metadata) do
+    if is_reference(value),
+      do: {:ok, value},
+      else: error_tuple({:invalid_value, type: type, value: value}, metadata)
+  end
+
+  def validate_value(:mfa = type, value, metadata) do
+    if match?({mod, fun, args} when is_atom(mod) and is_atom(fun) and is_list(args), value),
+      do: {:ok, value},
+      else: error_tuple({:invalid_value, type: type, value: value}, metadata)
+  end
+
+  def validate_value({:fun, arity} = type, value, metadata) do
+    if is_function(value) && fun_arity(value) == arity,
+      do: {:ok, value},
+      else: error_tuple({:invalid_value, type: type, value: value}, metadata)
+  end
+
+  def validate_value(:mod_args = type, value, metadata) do
+    if match?({mod, _args} when is_atom(mod), value),
+      do: {:ok, value},
+      else: error_tuple({:invalid_value, type: type, value: value}, metadata)
+  end
+
+  def validate_value({:value_in, values} = type, value, metadata) do
+    if value in values,
+      do: {:ok, value},
+      else: error_tuple({:invalid_value, type: type, value: value}, metadata)
+  end
+
+  def validate_value({:type_in, subtypes} = type, value, metadata) do
     for t <- subtypes do
       if match?({:ok, _}, validate_value(t, value, metadata)),
         do: throw(:ok)
@@ -202,21 +208,17 @@ defmodule CozyKV.Value do
     :ok -> {:ok, value}
   end
 
-  def validate_value({:custom, mod, fun, args} = type, value, metadata) do
-    case apply(mod, fun, [value | args]) do
+  def validate_value({:custom, mod, fun} = type, value, metadata) do
+    case apply(mod, fun, [type, value, metadata]) do
       {:ok, value} ->
         {:ok, value}
 
-      {:error, message} ->
-        error_tuple(
-          {:invalid_value, type: type, value: value},
-          Keyword.put(metadata, :message, message)
-        )
+      {:error, exception} when is_exception(exception) ->
+        {:error, exception}
 
       other ->
-        raise "custom validation function " <>
-                "#{inspect(mod)}.#{fun}/#{length(args) + 1} " <>
-                "must return {:ok, value} or {:error, message}, got: #{inspect(other)}"
+        raise "custom validation function #{inspect(mod)}.#{fun}/3 " <>
+                "must return {:ok, value} or {:error, exception}, got: #{inspect(other)}"
     end
   end
 
@@ -235,7 +237,7 @@ defmodule CozyKV.Value do
 
     attrs =
       metadata
-      |> Keyword.take([:message, :path])
+      |> Keyword.take([:path])
       |> Keyword.put(:type, {kind, detail})
 
     {:error, struct(ValidationError, attrs)}

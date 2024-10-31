@@ -18,17 +18,22 @@ defmodule CozyKV.Validator do
   # * path is for recording the level within the data.
   # * initial_run? is a flag for entering new level of nested data.
 
-  defp do_run([] = initial_spec, data, _path, initial_run?) do
+  defp do_run([] = initial_spec, data, path, initial_run?) do
     # 1. check unknown keys
     if initial_run? do
       known_keys = KV.keys(initial_spec)
       unknown_keys = KV.keys(data) -- known_keys
 
       if unknown_keys != [] do
+        {parent_key, parent_path} = List.pop_at(path, -1)
+
         throw(
           {:error,
            %ValidationError{
-             type: {:unknown_keys, known_keys: known_keys, unknown_keys: unknown_keys}
+             type:
+               {:unknown_keys,
+                key: parent_key, known_keys: known_keys, unknown_keys: unknown_keys},
+             path: parent_path
            }}
         )
       end
@@ -48,10 +53,15 @@ defmodule CozyKV.Validator do
       unknown_keys = KV.keys(data) -- known_keys
 
       if unknown_keys != [] do
+        {parent_key, parent_path} = List.pop_at(path, -1)
+
         throw(
           {:error,
            %ValidationError{
-             type: {:unknown_keys, known_keys: known_keys, unknown_keys: unknown_keys}
+             type:
+               {:unknown_keys,
+                key: parent_key, known_keys: known_keys, unknown_keys: unknown_keys},
+             path: parent_path
            }}
         )
       end

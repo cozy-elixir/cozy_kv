@@ -5,155 +5,150 @@ defmodule CozyKV.Type do
   # This module uses many throws, but this is not an issue.
   # Because values are not thrown outside this module, it's a controlled usage.
 
-  @basic_types [
+  alias CozyKV.ValidationError
+
+  @available_types [
     :any,
-    :atom,
     nil,
+    :atom,
     :boolean,
     :string,
     :integer,
     :pos_integer,
     :non_neg_integer,
     :float,
+    :tuple,
+    "{:tuple, subtypes}",
+    :list,
+    "{:list, subtype}",
+    :keyword_list,
+    "{:keyword_list, spec}",
+    :non_empty_keyword_list,
+    "{:non_empty_keyword_list, spec}",
+    :map,
+    "{:map, key_type, value_type}",
+    "{:map, spec}",
+    "{:struct, struct_name}",
     :timeout,
     :pid,
     :reference,
     :mfa,
+    "{:fun, arity}",
     :mod_args,
-    :list,
-    :keyword_list,
-    :non_empty_keyword_list,
-    :map
+    "{:value_in, values}",
+    "{:type_in, subtyes}",
+    "{:custom, mod, fun}"
   ]
 
-  defp available_types() do
-    types =
-      Enum.map(@basic_types, &inspect/1) ++
-        [
-          "{:list, subtype}",
-          "{:keyword_list, keys_spec}",
-          "{:non_empty_keyword_list, keys_spec}",
-          "{:map, keys_spec}",
-          "{:map, key_type, value_type}",
-          "{:fun, arity}",
-          "{:struct, struct_name}",
-          "{:tuple, subtypes}",
-          "{:in, choices}",
-          "{:or, subtypes}",
-          "{:custom, mod, fun, args}"
-        ]
+  @available_types_block Enum.map_join(@available_types, ", ", fn
+                           type when is_atom(type) -> inspect(type)
+                           type -> type
+                         end)
 
-    Enum.join(types, ", ")
-  end
+  @basic_types Enum.filter(@available_types, &is_atom(&1))
 
-  @doc false
-  def validate_type(type) when type in @basic_types do
+  def validate_type(_init_type, type, _metadata) when type in @basic_types do
     {:ok, type}
   end
 
-  def validate_type({:list, subtype} = type) do
-    case validate_type(subtype) do
-      {:ok, _} ->
-        :pass
-
-      {:error, reason} ->
-        throw({:error, "invalid subtype given to {:list, subtype} type: #{reason}"})
-    end
-
-    {:ok, type}
-  catch
-    {:error, reason} -> {:error, reason}
-  end
-
-  def validate_type({:tuple, subtypes} = type) when is_list(subtypes) do
+  def validate_type(init_type, {:tuple, subtypes} = type, metadata) when is_list(subtypes) do
     for subtype <- subtypes do
-      case validate_type(subtype) do
-        {:ok, _} ->
-          :pass
-
-        {:error, reason} ->
-          throw({:error, "invalid subtype given to {:tuple, subtypes} type: #{reason}"})
-      end
+      if match?({:error, _}, validate_type(init_type, subtype, metadata)),
+        do: throw(:invalid_value)
     end
 
     {:ok, type}
   catch
-    {:error, reason} -> {:error, reason}
+    :invalid_value ->
+      error_tuple({:invalid_value, init_type: init_type, type: type}, metadata)
+  end
+
+  def validate_type(init_type, {:list, subtype} = type, metadata) do
+    if match?({:error, _}, validate_type(init_type, subtype, metadata)), do: throw(:invalid_value)
+    {:ok, type}
+  catch
+    :invalid_value ->
+      error_tuple({:invalid_value, init_type: init_type, type: type}, metadata)
   end
 
   # keys should be validated by Spec module, but I don't want a cross-dependency
   # between the Spec module and current module.
-  def validate_type({:keyword_list, _keys_spec} = type) do
+  def validate_type(_init_type, {:keyword_list, _spec} = type, _metadata) do
     {:ok, type}
   end
 
-  # the comment of {:keyword_list, keys_spec} applies here.
-  def validate_type({:non_empty_keyword_list, _keys_spec} = type) do
+  # the comment of {:keyword_list, spec} applies here.
+  def validate_type(_init_type, {:non_empty_keyword_list, _spec} = type, _metadata) do
     {:ok, type}
   end
 
-  # the comment of {:keyword_list, keys_spec} applies here.
-  def validate_type({:map, _keys_spec} = type) do
-    {:ok, type}
-  end
+  def validate_type(init_type, {:map, key_type, value_type} = type, metadata) do
+    if match?({:error, _}, validate_type(init_type, key_type, metadata)),
+      do: throw(:invalid_value)
 
-  def validate_type({:map, key_type, value_type} = type) do
-    case validate_type(key_type) do
-      {:ok, _} ->
-        :pass
-
-      {:error, reason} ->
-        throw({:error, "invalid key_type for {:map, key_type, value_type} type: #{reason}"})
-    end
-
-    case validate_type(value_type) do
-      {:ok, _} ->
-        :pass
-
-      {:error, reason} ->
-        throw({:error, "invalid value_type for {:map, key_type, value_type} type: #{reason}"})
-    end
+    if match?({:error, _}, validate_type(init_type, value_type, metadata)),
+      do: throw(:invalid_value)
 
     {:ok, type}
   catch
-    {:error, reason} -> {:error, reason}
+    :invalid_value ->
+      error_tuple({:invalid_value, init_type: init_type, type: type}, metadata)
   end
 
-  def validate_type({:fun, arity} = value) when is_integer(arity) and arity >= 0 do
-    {:ok, value}
+  # the comment of {:keyword_list, spec} applies here.
+  def validate_type(_init_type, {:map, _spec} = type, _metadata) do
+    {:ok, type}
   end
 
-  def validate_type({:struct, struct_name}) when is_atom(struct_name) do
-    {:ok, {:struct, struct_name}}
+  def validate_type(_init_type, {:struct, struct_name} = type, _metadata)
+      when is_atom(struct_name) do
+    {:ok, type}
   end
 
-  # `choices` can be any enumerable. For now, there's no easy and fast way to validate it.
-  def validate_type({:in, _choices} = value) do
-    {:ok, value}
+  def validate_type(_init_type, {:fun, arity} = type, _metadata)
+      when is_integer(arity) and arity >= 0 do
+    {:ok, type}
   end
 
-  def validate_type({:or, subtypes} = type) when is_list(subtypes) do
+  # `values` can be any enumerable. For now, there's no easy and fast way to validate it.
+  def validate_type(_init_type, {:value_in, _values} = type, _metadata) do
+    {:ok, type}
+  end
+
+  def validate_type(init_type, {:type_in, subtypes} = type, metadata) when is_list(subtypes) do
     for subtype <- subtypes do
-      case validate_type(subtype) do
-        {:ok, _} ->
-          :pass
-
-        {:error, reason} ->
-          throw({:error, "invalid subtype given to {:or, subtypes} type: #{reason}"})
-      end
+      if match?({:error, _}, validate_type(init_type, subtype, metadata)),
+        do: throw(:invalid_value)
     end
 
     {:ok, type}
   catch
-    {:error, reason} -> {:error, reason}
+    :invalid_value ->
+      error_tuple({:invalid_value, init_type: init_type, type: type}, metadata)
   end
 
-  def validate_type({:custom, mod, fun, args} = value)
-      when is_atom(mod) and is_atom(fun) and is_list(args) do
-    {:ok, value}
+  def validate_type(_init_type, {:custom, mod, fun} = type, _metadata)
+      when is_atom(mod) and is_atom(fun) do
+    {:ok, type}
   end
 
-  def validate_type(value) do
-    {:error, "unknown type #{inspect(value)}.\n\nAvailable types: #{available_types()}"}
+  def validate_type(init_type, type, metadata) do
+    error_tuple({:invalid_value, init_type: init_type, type: type}, metadata)
+  end
+
+  def available_types_block(), do: @available_types_block
+
+  defp error_tuple({kind, detail} = type, metadata) when is_tuple(type) and is_list(metadata) do
+    [init_type: init_type, type: type] = detail
+
+    key = Keyword.fetch!(metadata, :key)
+    detail = [key: key, type: init_type, value: type]
+
+    attrs =
+      metadata
+      |> Keyword.take([:path])
+      |> Keyword.put(:type, {kind, detail})
+
+    {:error, struct(ValidationError, attrs)}
   end
 end
