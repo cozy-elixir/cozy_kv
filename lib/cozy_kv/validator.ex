@@ -42,6 +42,7 @@ defmodule CozyKV.Validator do
     data
   end
 
+  # credo:disable-for-next-line
   defp do_run([spec | rest] = initial_spec, data, path, initial_run?) do
     {key, key_spec} = spec
 

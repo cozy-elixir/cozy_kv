@@ -90,6 +90,12 @@ defmodule CozyKV do
 
   These options are supported:
 
+    * `:type`
+    * `:required`
+    * `:default`
+    * `:deprecated`
+    * `:doc`
+
   ### Types and Values
 
   > The left side of `-` is the type name, and the right side is the description
@@ -238,19 +244,18 @@ defmodule CozyKV do
 
   <!-- tabs-close -->
 
+  ## Use cases
+
+    * validate options (like what [nimble_options](https://hex.pm/packages/nimble_options) does).
+    * validate maps parsed from a JSON or YAML files.
+
   ## Limitations
 
     * `validate_spec!/1` doesn't validate the inner spec of a nested spec.
 
-  ## TODO
+  ## Todo
 
-    * Generates doc automatically.
-
-  ## Thanks
-
-  This library is built on the wisdom in following code:
-
-    * [nimble_options](https://hex.pm/packages/nimble_options)
+    * doc generation
 
   """
 
