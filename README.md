@@ -1,5 +1,8 @@
 # CozyKV
 
+[![CI](https://github.com/cozy-elixir/cozy_kv/actions/workflows/ci.yml/badge.svg)](https://github.com/cozy-elixir/cozy_kv/actions/workflows/ci.yml)
+[![Hex.pm](https://img.shields.io/hexpm/v/cozy_kv.svg)](https://hex.pm/packages/cozy_kv)
+
 Validates data containing key-value pairs.
 
 ## Installation
