@@ -41,8 +41,7 @@ defmodule CozyKV.MixProject do
 
   defp docs do
     [
-      extras: ["README.md"],
-      main: "readme",
+      extras: ["README.md", "ABOUT-LAYERS.md"],
       source_url: @source_url,
       source_ref: "v#{@version}"
     ]

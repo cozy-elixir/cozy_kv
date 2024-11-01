@@ -1,4 +1,4 @@
-defmodule CozyKV.Value do
+defmodule CozyKV.Validator.Value do
   @moduledoc false
 
   # WARNING:

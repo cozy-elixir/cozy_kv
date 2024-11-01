@@ -1,4 +1,4 @@
-defmodule CozyKV.Type do
+defmodule CozyKV.Primitive.Type do
   @moduledoc false
 
   # WARNING:

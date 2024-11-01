@@ -1,7 +1,7 @@
-defmodule CozyKV.KVTest do
+defmodule CozyKV.Validator.KVTest do
   use ExUnit.Case
 
-  alias CozyKV.KV
+  alias CozyKV.Validator.KV
 
   setup do
     samples = %{

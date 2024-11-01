@@ -1,4 +1,4 @@
-defmodule CozyKV.KV do
+defmodule CozyKV.Validator.KV do
   @moduledoc false
 
   def has_key?(term, key) when is_list(term),

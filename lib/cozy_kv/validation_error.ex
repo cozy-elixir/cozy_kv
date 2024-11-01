@@ -14,6 +14,8 @@ defmodule CozyKV.ValidationError do
   own version using the information provided by the error struct.
   """
 
+  alias CozyKV.Primitive
+
   @type key :: term()
   @type type :: term()
   @type value :: term()
@@ -53,12 +55,13 @@ defmodule CozyKV.ValidationError do
   end
 
   defp to_message(
-         {:invalid_value, [key: key, type: {:custom, CozyKV.Type, :validate_type}, value: value]},
+         {:invalid_value,
+          [key: key, type: {:custom, Primitive.Type, :validate_type}, value: value]},
          path
        ) do
     "invalid type #{inspect(value)} is used for #{inspect(key)} key under the path #{inspect(path)}." <>
       "\n\n" <>
-      "Available types: #{CozyKV.Type.available_types_block()}"
+      "Available types: #{Primitive.Type.available_types_block()}"
   end
 
   defp to_message(

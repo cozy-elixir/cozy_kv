@@ -259,7 +259,7 @@ defmodule CozyKV do
 
   """
 
-  alias CozyKV.Spec
+  alias CozyKV.MetaSpec
   alias CozyKV.Validator
   alias CozyKV.ValidationError
 
@@ -272,7 +272,16 @@ defmodule CozyKV do
   @spec validate_spec!(spec()) :: spec()
   def validate_spec!(spec) do
     ensure_structure_of_spec!(spec)
-    Spec.validate!(spec)
+
+    meta_spec = MetaSpec.build(spec)
+
+    case Validator.run(meta_spec, spec) do
+      {:ok, spec} ->
+        spec
+
+      {:error, exception} ->
+        raise ArgumentError, "invalid spec. Reason: #{Exception.message(exception)}"
+    end
   end
 
   @doc """

@@ -1,16 +1,15 @@
-defmodule CozyKV.Spec do
+defmodule CozyKV.MetaSpec do
   @moduledoc false
 
-  alias CozyKV.Type
-  alias CozyKV.Validator
+  alias CozyKV.Primitive
 
-  @base_spec [
+  @meta_spec [
     *: [
       type:
         {:keyword_list,
          [
            type: [
-             type: {:custom, Type, :validate_type},
+             type: {:custom, Primitive.Type, :validate_type},
              default: :any,
              doc: """
              The type of the value.
@@ -20,13 +19,13 @@ defmodule CozyKV.Spec do
              type: :boolean,
              default: false,
              doc: """
-             Defines if the key is required.
+             The flag value to indicate whether the key is required.
              """
            ],
            default: [
              type: :any,
              doc: """
-             The default value.\
+             The default value of the key.
              This value will be validated according to the `type`. This means that
              you can't have, for example, `type: :integer` and use `default: "a string"`.
              """
@@ -34,31 +33,19 @@ defmodule CozyKV.Spec do
            deprecated: [
              type: :string,
              doc: """
-             Defines a message to indicate that the key is deprecated. \
+             The message to indicate that the key is deprecated. \
              The message will be displayed as a warning.
              """
            ],
            doc: [
              type: {:type_in, [:string, {:in, [false]}]},
-             type_doc: "`t:String.t/0` or `false`",
              doc: "The documentation for the key."
            ]
          ]}
     ]
   ]
 
-  def validate!(spec) when is_list(spec) do
-    key_spec = key_spec()
-    spec_of_spec = Enum.map(spec, fn {key, _} -> {key, key_spec} end)
-
-    case Validator.run(spec_of_spec, spec) do
-      {:ok, spec} ->
-        spec
-
-      {:error, exception} ->
-        raise ArgumentError, "invalid spec. Reason: #{Exception.message(exception)}"
-    end
+  def build(spec) when is_list(spec) do
+    Enum.map(spec, fn {key, _} -> {key, @meta_spec[:*]} end)
   end
-
-  defp key_spec, do: @base_spec[:*]
 end

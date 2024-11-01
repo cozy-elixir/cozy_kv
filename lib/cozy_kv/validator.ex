@@ -6,7 +6,8 @@ defmodule CozyKV.Validator do
   # Because values are not thrown outside this module, it's a controlled usage.
 
   alias CozyKV.KV
-  alias CozyKV.Value
+  alias __MODULE__.KV
+  alias __MODULE__.Value
   alias CozyKV.ValidationError
 
   def run(spec, data) do
