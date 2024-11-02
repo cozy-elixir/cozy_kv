@@ -5,14 +5,13 @@ defmodule CozyKV.Validator do
   # This module uses many throws, but this is not an issue.
   # Because values are not thrown outside this module, it's a controlled usage.
 
-  alias CozyKV.KV
   alias __MODULE__.KV
   alias CozyKV.ValidationError
 
   def run(spec, data) do
     {:ok, do_run(spec, data, [], true)}
   catch
-    {:error, %ValidationError{}} = result -> result
+    exception when is_exception(exception) -> {:error, exception}
   end
 
   # * path is for recording the level within the data.
@@ -25,16 +24,8 @@ defmodule CozyKV.Validator do
       unknown_keys = KV.keys(data) -- known_keys
 
       if unknown_keys != [] do
-        {parent_key, parent_path} = List.pop_at(path, -1)
-
-        throw(
-          {:error,
-           %ValidationError{
-             type:
-               {:unknown_keys,
-                key: parent_key, known_keys: known_keys, unknown_keys: unknown_keys},
-             path: parent_path
-           }}
+        throw_error({:unknown_keys, known_keys: known_keys, unknown_keys: unknown_keys},
+          path: path
         )
       end
     end
@@ -54,16 +45,8 @@ defmodule CozyKV.Validator do
       unknown_keys = KV.keys(data) -- known_keys
 
       if unknown_keys != [] do
-        {parent_key, parent_path} = List.pop_at(path, -1)
-
-        throw(
-          {:error,
-           %ValidationError{
-             type:
-               {:unknown_keys,
-                key: parent_key, known_keys: known_keys, unknown_keys: unknown_keys},
-             path: parent_path
-           }}
+        throw_error({:unknown_keys, known_keys: known_keys, unknown_keys: unknown_keys},
+          path: path
         )
       end
     end
@@ -80,12 +63,8 @@ defmodule CozyKV.Validator do
 
     # 3. check required key
     if !data_has_key? && Keyword.get(key_spec, :required, false) do
-      throw(
-        {:error,
-         %ValidationError{
-           type: {:missing_key, required_key: key, received_keys: KV.keys(data)},
-           path: path
-         }}
+      throw_error({:missing_key, received_keys: KV.keys(data)},
+        path: path ++ [path_item(data, key)]
       )
     end
 
@@ -102,27 +81,7 @@ defmodule CozyKV.Validator do
       if new_data_has_key? do
         key_type = key_spec[:type]
         key_value = KV.get(data, key)
-
-        # 5.1 validate the outline shape of value
-        key_value =
-          case validate_value(key_type, key_value, path: path, key: key) do
-            {:ok, key_value} ->
-              key_value
-
-            {:error, %ValidationError{}} = result ->
-              throw(result)
-          end
-
-        # 5.2 validate the accurate shape of value
-        key_value =
-          case key_type do
-            {t, spec} when t in [:keyword_list, :non_empty_keyword_list, :map] ->
-              do_run(spec, key_value, path ++ [key], true)
-
-            _ ->
-              key_value
-          end
-
+        key_value = validate_value(key_type, key_value, path: path ++ [path_item(data, key)])
         KV.put(data, key, key_value)
       else
         data
@@ -132,218 +91,230 @@ defmodule CozyKV.Validator do
   end
 
   def validate_value(:any, value, _metadata) do
-    {:ok, value}
+    value
   end
 
   def validate_value(nil = type, value, metadata) do
     if is_nil(value),
-      do: {:ok, value},
-      else: error_tuple({:invalid_value, type: type, value: value}, metadata)
+      do: value,
+      else: throw_error({:invalid_value, type: type, value: value}, metadata)
   end
 
   def validate_value(:atom = type, value, metadata) do
     if is_atom(value),
-      do: {:ok, value},
-      else: error_tuple({:invalid_value, type: type, value: value}, metadata)
+      do: value,
+      else: throw_error({:invalid_value, type: type, value: value}, metadata)
   end
 
   def validate_value(:boolean = type, value, metadata) do
     if is_boolean(value),
-      do: {:ok, value},
-      else: error_tuple({:invalid_value, type: type, value: value}, metadata)
+      do: value,
+      else: throw_error({:invalid_value, type: type, value: value}, metadata)
   end
 
   def validate_value(:string = type, value, metadata) do
     if is_binary(value),
-      do: {:ok, value},
-      else: error_tuple({:invalid_value, type: type, value: value}, metadata)
+      do: value,
+      else: throw_error({:invalid_value, type: type, value: value}, metadata)
   end
 
   def validate_value(:integer = type, value, metadata) do
     if is_integer(value),
-      do: {:ok, value},
-      else: error_tuple({:invalid_value, type: type, value: value}, metadata)
+      do: value,
+      else: throw_error({:invalid_value, type: type, value: value}, metadata)
   end
 
   def validate_value(:pos_integer = type, value, metadata) do
     if is_integer(value) and value > 0,
-      do: {:ok, value},
-      else: error_tuple({:invalid_value, type: type, value: value}, metadata)
+      do: value,
+      else: throw_error({:invalid_value, type: type, value: value}, metadata)
   end
 
   def validate_value(:non_neg_integer = type, value, metadata) do
     if is_integer(value) and value >= 0,
-      do: {:ok, value},
-      else: error_tuple({:invalid_value, type: type, value: value}, metadata)
+      do: value,
+      else: throw_error({:invalid_value, type: type, value: value}, metadata)
   end
 
   def validate_value(:float = type, value, metadata) do
     if is_float(value),
-      do: {:ok, value},
-      else: error_tuple({:invalid_value, type: type, value: value}, metadata)
+      do: value,
+      else: throw_error({:invalid_value, type: type, value: value}, metadata)
   end
 
   def validate_value(:tuple = type, value, metadata) do
     if is_tuple(value),
-      do: {:ok, value},
-      else: error_tuple({:invalid_value, type: type, value: value}, metadata)
+      do: value,
+      else: throw_error({:invalid_value, type: type, value: value}, metadata)
   end
 
   def validate_value({:tuple, subtypes} = type, value, metadata) do
-    if !is_tuple(value), do: throw(:invalid_value)
-    if !(tuple_size(value) == length(subtypes)), do: throw(:invalid_value)
+    if !is_tuple(value),
+      do: throw_error({:invalid_value, type: type, value: value}, metadata)
 
-    for {t, v} <- Enum.zip(subtypes, Tuple.to_list(value)) do
-      if match?({:error, _}, validate_value(t, v, metadata)),
-        do: throw(:invalid_value)
-    end
+    if !(tuple_size(value) == length(subtypes)),
+      do: throw_error({:invalid_value, type: type, value: value}, metadata)
 
-    {:ok, value}
-  catch
-    :invalid_value ->
-      error_tuple({:invalid_value, type: type, value: value}, metadata)
+    Tuple.to_list(value)
+    |> Enum.with_index()
+    |> Enum.zip(subtypes)
+    |> Enum.map(fn {{element, index}, subtype} ->
+      metadata = Keyword.update!(metadata, :path, fn path -> path ++ [{:tuple, index}] end)
+      validate_value(subtype, element, metadata)
+    end)
+    |> List.to_tuple()
   end
 
-  def validate_value(:list, value, metadata) do
-    validate_value({:list, :any}, value, metadata)
+  def validate_value(:list = type, value, metadata) do
+    if is_list(value),
+      do: value,
+      else: throw_error({:invalid_value, type: type, value: value}, metadata)
   end
 
   def validate_value({:list, subtype} = type, value, metadata) do
-    if !is_list(value), do: throw(:invalid_value)
+    if !is_list(value), do: throw_error({:invalid_value, type: type, value: value}, metadata)
 
-    for v <- value do
-      if match?({:error, _}, validate_value(subtype, v, metadata)),
-        do: throw(:invalid_value)
-    end
-
-    {:ok, value}
-  catch
-    :invalid_value ->
-      error_tuple({:invalid_value, type: type, value: value}, metadata)
+    value
+    |> Enum.with_index()
+    |> Enum.map(fn {element, index} ->
+      metadata = Keyword.update!(metadata, :path, fn path -> path ++ [{:list, index}] end)
+      validate_value(subtype, element, metadata)
+    end)
   end
 
   def validate_value(:keyword_list = type, value, metadata) do
     if keyword_list?(value),
-      do: {:ok, value},
-      else: error_tuple({:invalid_value, type: type, value: value}, metadata)
+      do: value,
+      else: throw_error({:invalid_value, type: type, value: value}, metadata)
   end
 
-  def validate_value({:keyword_list, _spec} = type, value, metadata) do
-    if keyword_list?(value),
-      do: {:ok, value},
-      else: error_tuple({:invalid_value, type: type, value: value}, metadata)
+  def validate_value({:keyword_list, spec} = type, value, metadata) do
+    if !keyword_list?(value),
+      do: throw_error({:invalid_value, type: type, value: value}, metadata)
+
+    do_run(spec, value, metadata[:path], true)
   end
 
   def validate_value(:non_empty_keyword_list = type, value, metadata) do
     if keyword_list?(value) and value != [],
-      do: {:ok, value},
-      else: error_tuple({:invalid_value, type: type, value: value}, metadata)
+      do: value,
+      else: throw_error({:invalid_value, type: type, value: value}, metadata)
   end
 
-  def validate_value({:non_empty_keyword_list, _spec} = type, value, metadata) do
-    if keyword_list?(value) and value != [],
-      do: {:ok, value},
-      else: error_tuple({:invalid_value, type: type, value: value}, metadata)
+  def validate_value({:non_empty_keyword_list, spec} = type, value, metadata) do
+    if !(keyword_list?(value) and value != []),
+      do: throw_error({:invalid_value, type: type, value: value}, metadata)
+
+    do_run(spec, value, metadata[:path], true)
   end
 
   def validate_value(:map, value, metadata) do
     validate_value({:map, :atom, :any}, value, metadata)
   end
 
-  def validate_value({:map, key_type, value_type} = type, value, metadata) do
-    if !is_map(value), do: throw(:invalid_value)
+  def validate_value({:map, spec} = type, value, metadata) do
+    if !is_map(value),
+      do: throw_error({:invalid_value, type: type, value: value}, metadata)
 
-    for {k, v} <- value do
-      if match?({:error, _}, validate_value(key_type, k, metadata)),
-        do: throw(:invalid_value)
-
-      if match?({:error, _}, validate_value(value_type, v, metadata)),
-        do: throw(:invalid_value)
-    end
-
-    {:ok, value}
-  catch
-    :invalid_value ->
-      error_tuple({:invalid_value, type: type, value: value}, metadata)
+    do_run(spec, value, metadata[:path], true)
   end
 
-  def validate_value({:map, _spec} = type, value, metadata) do
-    if is_map(value),
-      do: {:ok, value},
-      else: error_tuple({:invalid_value, type: type, value: value}, metadata)
+  def validate_value({:map, key_type, value_type} = type, value, metadata) do
+    if !is_map(value),
+      do: throw_error({:invalid_value, type: type, value: value}, metadata)
+
+    Enum.into(value, %{}, fn {k, v} ->
+      k = validate_value(key_type, k, metadata)
+      v = validate_value(value_type, v, metadata)
+      {k, v}
+    end)
   end
 
   def validate_value({:struct, struct_name} = type, value, metadata) do
     if match?(%^struct_name{}, value),
-      do: {:ok, value},
-      else: error_tuple({:invalid_value, type: type, value: value}, metadata)
+      do: value,
+      else: throw_error({:invalid_value, type: type, value: value}, metadata)
   end
 
   def validate_value(:timeout = type, value, metadata) do
     if value == :infinity or (is_integer(value) and value >= 0),
-      do: {:ok, value},
-      else: error_tuple({:invalid_value, type: type, value: value}, metadata)
+      do: value,
+      else: throw_error({:invalid_value, type: type, value: value}, metadata)
   end
 
   def validate_value(:pid = type, value, metadata) do
     if is_pid(value),
-      do: {:ok, value},
-      else: error_tuple({:invalid_value, type: type, value: value}, metadata)
+      do: value,
+      else: throw_error({:invalid_value, type: type, value: value}, metadata)
   end
 
   def validate_value(:reference = type, value, metadata) do
     if is_reference(value),
-      do: {:ok, value},
-      else: error_tuple({:invalid_value, type: type, value: value}, metadata)
+      do: value,
+      else: throw_error({:invalid_value, type: type, value: value}, metadata)
   end
 
   def validate_value(:mfa = type, value, metadata) do
     if match?({mod, fun, args} when is_atom(mod) and is_atom(fun) and is_list(args), value),
-      do: {:ok, value},
-      else: error_tuple({:invalid_value, type: type, value: value}, metadata)
+      do: value,
+      else: throw_error({:invalid_value, type: type, value: value}, metadata)
   end
 
   def validate_value({:fun, arity} = type, value, metadata) do
     if is_function(value) && fun_arity(value) == arity,
-      do: {:ok, value},
-      else: error_tuple({:invalid_value, type: type, value: value}, metadata)
+      do: value,
+      else: throw_error({:invalid_value, type: type, value: value}, metadata)
   end
 
   def validate_value(:mod_args = type, value, metadata) do
     if match?({mod, _args} when is_atom(mod), value),
-      do: {:ok, value},
-      else: error_tuple({:invalid_value, type: type, value: value}, metadata)
+      do: value,
+      else: throw_error({:invalid_value, type: type, value: value}, metadata)
   end
 
   def validate_value({:value_in, values} = type, value, metadata) do
     if value in values,
-      do: {:ok, value},
-      else: error_tuple({:invalid_value, type: type, value: value}, metadata)
+      do: value,
+      else: throw_error({:invalid_value, type: type, value: value}, metadata)
   end
 
   def validate_value({:type_in, subtypes} = type, value, metadata) do
-    for t <- subtypes do
-      if match?({:ok, _}, validate_value(t, value, metadata)),
-        do: throw(:ok)
+    for subtype <- subtypes do
+      try do
+        value = validate_value(subtype, value, metadata)
+        throw({:ok, value})
+      catch
+        {:ok, value} -> throw({:ok, value})
+        exception when is_exception(exception) -> :next
+      end
     end
 
-    error_tuple({:invalid_value, type: type, value: value}, metadata)
+    throw_error({:invalid_value, type: type, value: value}, metadata)
   catch
-    :ok -> {:ok, value}
+    {:ok, value} -> value
+    other -> throw(other)
   end
 
   def validate_value({:custom, mod, fun} = type, value, metadata) do
     case apply(mod, fun, [type, value, metadata]) do
       {:ok, value} ->
-        {:ok, value}
+        value
 
       {:error, exception} when is_exception(exception) ->
-        {:error, exception}
+        throw(exception)
 
       other ->
         raise "custom validation function #{inspect(mod)}.#{fun}/3 " <>
                 "must return {:ok, value} or {:error, exception}, got: #{inspect(other)}"
     end
+  end
+
+  defp path_item(data, key) when is_list(data) do
+    {{:kv, :list}, key}
+  end
+
+  defp path_item(data, key) when is_map(data) do
+    {{:kv, :map}, key}
   end
 
   defp keyword_list?(value) do
@@ -355,15 +326,12 @@ defmodule CozyKV.Validator do
     arity
   end
 
-  defp error_tuple({kind, detail} = type, metadata) when is_tuple(type) and is_list(metadata) do
-    key = Keyword.fetch!(metadata, :key)
-    detail = Keyword.put(detail, :key, key)
-
+  defp throw_error({_kind, _detail} = type, metadata) when is_tuple(type) and is_list(metadata) do
     attrs =
       metadata
       |> Keyword.take([:path])
-      |> Keyword.put(:type, {kind, detail})
+      |> Keyword.put(:type, type)
 
-    {:error, struct(ValidationError, attrs)}
+    throw(struct(ValidationError, attrs))
   end
 end

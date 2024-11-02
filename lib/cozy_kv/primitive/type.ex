@@ -140,9 +140,7 @@ defmodule CozyKV.Primitive.Type do
 
   defp error_tuple({kind, detail} = type, metadata) when is_tuple(type) and is_list(metadata) do
     [init_type: init_type, type: type] = detail
-
-    key = Keyword.fetch!(metadata, :key)
-    detail = [key: key, type: init_type, value: type]
+    detail = [type: init_type, value: type]
 
     attrs =
       metadata
